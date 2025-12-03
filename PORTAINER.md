@@ -25,7 +25,7 @@ This guide explains how to deploy the simpleTestNginxComposerDocker application 
    - **Build method**: Select **Repository**
    - **Repository URL**: Enter your Git repository URL
      ```
-     https://github.com/<your-username>/<your-repository>
+     https://github.com/username/repository
      ```
    - **Repository reference**: Leave as `refs/heads/main` or specify your branch
    - **Compose path**: `docker-compose.yml`
@@ -44,7 +44,7 @@ This guide explains how to deploy the simpleTestNginxComposerDocker application 
 6. **Access the Application**
    - Once deployed, the application will be accessible at:
      ```
-     http://<your-docker-host-ip>:8080
+     http://your-docker-host-ip:8080
      ```
    - Replace `8080` with your configured `NGINX_PORT` if you changed it
 
@@ -174,7 +174,7 @@ To customize the application:
 1. Verify the stack is running in Portainer
 2. Check that the `NGINX_PORT` is correctly mapped
 3. Ensure your firewall allows traffic on the configured port
-4. Try accessing: `http://<docker-host-ip>:<NGINX_PORT>`
+4. Try accessing: `http://your-docker-host-ip:NGINX_PORT`
 
 ### PHP Files Not Processing
 
