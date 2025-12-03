@@ -9,7 +9,15 @@ This project includes:
 - **test_php-fpm**: PHP-FPM 8.2 (alpine-based)
 - A simple "Hello World" PHP application
 
+## Deployment Options
+
+This application can be deployed in multiple ways:
+- **Local Development**: Using Docker Compose (see usage below)
+- **Portainer**: For container management and deployment ([See Portainer Guide](PORTAINER.md))
+
 ## Usage
+
+### Local Development
 
 ### Start the services
 
@@ -30,6 +38,19 @@ You should see "Hello World!" displayed.
 
 ```bash
 docker compose down
+```
+
+### Configuration
+
+You can customize the external port by creating a `.env` file:
+
+```bash
+cp .env.example .env
+```
+
+Then edit `.env` and change the `NGINX_PORT` value:
+```
+NGINX_PORT=8080
 ```
 
 ## Project Structure
