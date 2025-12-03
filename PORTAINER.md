@@ -25,7 +25,7 @@ This guide explains how to deploy the simpleTestNginxComposerDocker application 
    - **Build method**: Select **Repository**
    - **Repository URL**: Enter your Git repository URL
      ```
-     https://github.com/JamesMcMurran/simpleTestNginxComposerDocker
+     https://github.com/<your-username>/<your-repository>
      ```
    - **Repository reference**: Leave as `refs/heads/main` or specify your branch
    - **Compose path**: `docker-compose.yml`
