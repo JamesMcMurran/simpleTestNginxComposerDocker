@@ -1,0 +1,113 @@
+name: IAT Testing
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: 'Docker image tag to test'
+        required: true
+      test_environment:
+        description: 'Test environment'
+        required: false
+        default: 'iat'
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  run-tests:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull Docker image
+        run: |
+          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.event.inputs.image_tag }}
+
+      - name: Start services
+        run: |
+          export IMAGE_TAG=${{ github.event.inputs.image_tag }}
+          docker compose -f docker-compose.iat.yml up -d
+          sleep 10
+
+      - name: Wait for services to be healthy
+        run: |
+          timeout 60 bash -c 'until docker compose -f docker-compose.iat.yml ps | grep -q "healthy"; do sleep 2; done' || true
+          docker compose -f docker-compose.iat.yml ps
+
+      - name: Run linting
+        run: |
+          docker compose -f docker-compose.iat.yml exec -T php-fpm sh -c "
+            if [ -f composer.json ]; then
+              composer install --no-interaction --prefer-dist
+              composer run-script lint || exit 1
+            fi
+          "
+
+      - name: Run unit tests
+        run: |
+          docker compose -f docker-compose.iat.yml exec -T php-fpm sh -c "
+            if [ -f composer.json ]; then
+              composer run-script test || exit 1
+            fi
+          "
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Playwright
+        working-directory: tests
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Run Playwright tests
+        working-directory: tests
+        env:
+          BASE_URL: http://localhost:8080
+        run: |
+          npx playwright test
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: tests/playwright-report/
+          retention-days: 7
+
+      - name: Stop services
+        if: always()
+        run: docker compose -f docker-compose.iat.yml down -v
+
+      - name: Report test results
+        if: success()
+        run: |
+          echo "✅ All tests passed!" >> $GITHUB_STEP_SUMMARY
+          echo "Image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.event.inputs.image_tag }}" >> $GITHUB_STEP_SUMMARY
+
+      - name: Trigger staging deployment
+        if: success()
+        run: |
+          curl -X POST "${{ secrets.STAGING_WEBHOOK_URL }}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "image": "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:staging",
+              "source_tag": "${{ github.event.inputs.image_tag }}",
+              "status": "approved"
+            }' || echo "Staging webhook failed"

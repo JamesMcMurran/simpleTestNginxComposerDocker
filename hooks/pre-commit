@@ -1,0 +1,41 @@
+#!/bin/bash
+# Pre-commit hook for code quality checks
+# Install: cp hooks/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
+
+set -e
+
+echo "🔍 Running pre-commit checks..."
+
+# Check if composer is installed
+if ! command -v composer &> /dev/null; then
+    echo "⚠️  Composer not found. Skipping PHP checks."
+    exit 0
+fi
+
+# Check if vendor directory exists
+if [ ! -d "vendor" ]; then
+    echo "📦 Installing dependencies..."
+    composer install --no-interaction
+fi
+
+# Run PHP CodeSniffer
+echo "🔧 Running PHP CodeSniffer..."
+if composer run-script lint; then
+    echo "✅ Linting passed"
+else
+    echo "❌ Linting failed. Please fix the issues before committing."
+    echo "💡 Run 'composer run-script lint-fix' to auto-fix some issues."
+    exit 1
+fi
+
+# Run PHPUnit tests
+echo "🧪 Running unit tests..."
+if composer run-script test; then
+    echo "✅ All tests passed"
+else
+    echo "❌ Tests failed. Please fix the failing tests before committing."
+    exit 1
+fi
+
+echo "✅ Pre-commit checks passed!"
+exit 0

@@ -1,0 +1,79 @@
+name: Production Deployment
+
+on:
+  push:
+    branches:
+      - main
+      - master
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  deploy-production:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull and tag staging image
+        run: |
+          # Pull staging image and tag as latest for production
+          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:staging
+          docker tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:staging \
+                     ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          
+          # Also tag with commit SHA for rollback capability
+          docker tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:staging \
+                     ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:prod-${{ github.sha }}
+          
+          # Push both tags
+          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:prod-${{ github.sha }}
+
+      - name: Send webhook to Portainer (Production)
+        run: |
+          curl -X POST "${{ secrets.PORTAINER_PROD_WEBHOOK }}" \
+            -H "Content-Type: application/json" \
+            -d '{}' || echo "Portainer webhook failed"
+
+      - name: Create release tag
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          TAG_NAME="release-$(date +%Y%m%d-%H%M%S)"
+          git tag -a "$TAG_NAME" -m "Production release from commit ${{ github.sha }}"
+          git push origin "$TAG_NAME" || echo "Tag push failed"
+
+      - name: Create deployment summary
+        run: |
+          echo "## 🚀 Production Deployment" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Production Image:** ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest" >> $GITHUB_STEP_SUMMARY
+          echo "**Rollback Image:** ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:prod-${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Status:** ✅ Deployed to Production" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🔄 Rollback Instructions" >> $GITHUB_STEP_SUMMARY
+          echo "If rollback is needed, use image: \`prod-${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+
+      - name: Notify deployment
+        if: always()
+        run: |
+          if [ "${{ job.status }}" == "success" ]; then
+            echo "✅ Production deployment successful"
+          else
+            echo "❌ Production deployment failed"
+          fi
