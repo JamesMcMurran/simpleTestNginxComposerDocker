@@ -1,7 +1,7 @@
 FROM php:8.2-fpm-alpine
 
 # Install system dependencies
-RUN apk add --no-cache \
+RUN apk update && apk add --no-cache \
     postgresql-dev \
     libpq \
     git \

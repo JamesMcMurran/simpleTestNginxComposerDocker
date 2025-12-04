@@ -23,7 +23,7 @@ services:
       retries: 5
 
   php-fpm:
-    image: ${DOCKER_REGISTRY:-ghcr.io}/${DOCKER_IMAGE:-jamesmcmurran/simpletestnginxcomposerdocker}:staging
+    image: php:8.2-fpm-alpine
     container_name: staging_php-fpm
     restart: unless-stopped
     environment:
@@ -32,11 +32,15 @@ services:
       DB_USER: todouser
       DB_PASS: ${DB_PASSWORD:-todopass}
       APP_ENV: staging
+    volumes:
+      - ./src:/var/www/html
+      - ./docker/php-entrypoint.sh:/usr/local/bin/php-entrypoint.sh
     depends_on:
       postgres:
         condition: service_healthy
     networks:
       - app_network
+    entrypoint: ["/usr/local/bin/php-entrypoint.sh"]
 
   nginx:
     image: nginx:alpine
