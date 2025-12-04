@@ -27,9 +27,17 @@ if (strpos($requestUri, '/api/') === 0) {
             } elseif ($requestMethod === 'POST') {
                 // Create new todo
                 $data = json_decode(file_get_contents('php://input'), true);
+                $title = trim($data['title'] ?? '');
+                
+                if (empty($title)) {
+                    http_response_code(400);
+                    echo json_encode(['success' => false, 'error' => 'Title is required']);
+                    exit;
+                }
+                
                 $stmt = $pdo->prepare('INSERT INTO todos (title, description) VALUES (:title, :description)');
                 $stmt->execute([
-                    'title' => $data['title'] ?? '',
+                    'title' => $title,
                     'description' => $data['description'] ?? ''
                 ]);
                 echo json_encode(['success' => true, 'message' => 'Todo created']);
