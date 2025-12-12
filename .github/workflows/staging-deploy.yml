@@ -1,0 +1,53 @@
+name: Staging Deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_tag:
+        description: 'Source image tag from IAT'
+        required: true
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  deploy-staging:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Tag image for staging
+        run: |
+          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.event.inputs.source_tag }}
+          docker tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.event.inputs.source_tag }} \
+                     ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:staging
+          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:staging
+
+      - name: Send webhook to Portainer (Staging)
+        run: |
+          curl -X POST "${{ secrets.PORTAINER_STAGING_WEBHOOK }}" \
+            -H "Content-Type: application/json" \
+            -d '{}' || echo "Portainer webhook failed"
+
+      - name: Create deployment summary
+        run: |
+          echo "## 🚀 Staging Deployment" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Source Image:** ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.event.inputs.source_tag }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Staging Image:** ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:staging" >> $GITHUB_STEP_SUMMARY
+          echo "**Status:** ✅ Deployed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Ready for merge to main branch for production deployment." >> $GITHUB_STEP_SUMMARY

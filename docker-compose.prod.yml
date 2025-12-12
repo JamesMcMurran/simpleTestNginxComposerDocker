@@ -1,0 +1,81 @@
+# Production Environment Docker Compose Configuration
+# Use: docker compose -f docker-compose.prod.yml up -d
+# Webhook URL for Portainer: https://portainer.prod.example.com/api/webhooks/<webhook-id>
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: prod_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-todoapp}
+      POSTGRES_USER: ${DB_USER:-todouser}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - app_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-todouser} -d ${DB_NAME:-todoapp}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+
+  php-fpm:
+    image: php:8.2-fpm-alpine
+    container_name: prod_php-fpm
+    restart: unless-stopped
+    environment:
+      DB_HOST: postgres
+      DB_NAME: ${DB_NAME:-todoapp}
+      DB_USER: ${DB_USER:-todouser}
+      DB_PASS: ${DB_PASSWORD}
+      APP_ENV: production
+    volumes:
+      - ./src:/var/www/html
+      - ./docker/php-entrypoint.sh:/usr/local/bin/php-entrypoint.sh
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - app_network
+    entrypoint: ["/usr/local/bin/php-entrypoint.sh"]
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1G
+
+  nginx:
+    image: nginx:alpine
+    container_name: prod_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf
+      - ./src:/var/www/html
+      - ./nginx/ssl:/etc/nginx/ssl
+    depends_on:
+      - php-fpm
+    networks:
+      - app_network
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 256M
+
+networks:
+  app_network:
+    driver: bridge
+
+volumes:
+  postgres_data:

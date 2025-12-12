@@ -1,0 +1,82 @@
+# IAT (Integration Acceptance Testing) Docker Compose Configuration
+# Use: docker compose -f docker-compose.iat.yml up -d
+# Includes Playwright for end-to-end testing
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: iat_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: todoapp
+      POSTGRES_USER: todouser
+      POSTGRES_PASSWORD: todopass
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - app_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U todouser -d todoapp"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  php-fpm:
+    image: php:8.2-fpm-alpine
+    container_name: iat_php-fpm
+    restart: unless-stopped
+    environment:
+      DB_HOST: postgres
+      DB_NAME: todoapp
+      DB_USER: todouser
+      DB_PASS: todopass
+      APP_ENV: iat
+    volumes:
+      - ./src:/var/www/html
+      - ./docker/php-entrypoint.sh:/usr/local/bin/php-entrypoint.sh
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - app_network
+    entrypoint: ["/usr/local/bin/php-entrypoint.sh"]
+
+  nginx:
+    image: nginx:alpine
+    container_name: iat_nginx
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf
+      - ./src:/var/www/html
+    depends_on:
+      - php-fpm
+    networks:
+      - app_network
+
+  playwright:
+    image: mcr.microsoft.com/playwright:v1.45.0-jammy
+    container_name: iat_playwright
+    working_dir: /app
+    volumes:
+      - ./tests/e2e:/app/tests
+      - ./tests/playwright.config.js:/app/playwright.config.js
+      - ./tests/package.json:/app/package.json
+    environment:
+      BASE_URL: http://nginx:80
+    command: sh -c "npm install && npx playwright test"
+    depends_on:
+      - nginx
+    networks:
+      - app_network
+    profiles:
+      - testing
+
+networks:
+  app_network:
+    driver: bridge
+
+volumes:
+  postgres_data:
